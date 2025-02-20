@@ -1,31 +1,19 @@
-# db_utils.py
+# Register/db_utils.py
 import pyodbc
-from .config import DATABASE_CONFIG1
-from .config import DATABASE_DistProd
+from Server.config import DATABASE_AuroFiscal
 
-def get_db_connection():
+def get_AFiscal_connection():
     conn_str = (
-        f"DRIVER={DATABASE_CONFIG1['DRIVER']};"
-        f"SERVER={DATABASE_CONFIG1['SERVER']};"
-        f"DATABASE={DATABASE_CONFIG1['DATABASE']};"
-        f"UID={DATABASE_CONFIG1['UID']};"
-        f"PWD={DATABASE_CONFIG1['PWD']}"
+        f"DRIVER={DATABASE_AuroFiscal['DRIVER']};"
+        f"SERVER={DATABASE_AuroFiscal['SERVER']};"
+        f"DATABASE={DATABASE_AuroFiscal['DATABASE']};"
+        f"UID={DATABASE_AuroFiscal['UID']};"
+        f"PWD={DATABASE_AuroFiscal['PWD']}"
     )
     return pyodbc.connect(conn_str)
 
-def get_prod_connection():
-    conn_prod = (
-        f"DRIVER={DATABASE_DistProd['DRIVER']};"
-        f"SERVER={DATABASE_DistProd['SERVER']};"
-        f"DATABASE={DATABASE_DistProd['DATABASE']};"
-        f"UID={DATABASE_DistProd['UID']};"
-        f"PWD={DATABASE_DistProd['PWD']}"
-    )
-    return pyodbc.connect(conn_prod)
-
-
 def fetch_regimen_sat(tipo_persona: str):
-    # Seleccionar la columna a filtrar según el tipo de persona
+    # Seleccionar la columna según el tipo de persona
     column_filter = "RegimenSATPF" if tipo_persona == "fisica" else "RegimenSATPM"
     query = f"""
         SELECT RegimenSATId, RegimenSATDescripcion
@@ -33,7 +21,7 @@ def fetch_regimen_sat(tipo_persona: str):
         WHERE {column_filter} = 1
     """
     try:
-        conn = get_db_connection()
+        conn = get_AFiscal_connection()
         cursor = conn.cursor()
         cursor.execute(query)
         regimenes = [
@@ -48,39 +36,25 @@ def fetch_regimen_sat(tipo_persona: str):
     except Exception as e:
         return {"error": str(e)}
 
-
-def fetch_productos():
-    query = "SELECT * FROM Productos$"
+def fetch_usos_cfdi_descripcion(regimen_sat_id: int):
+    query = """
+        SELECT C.c_UsosCFDI, C.DescripcionUsoCFDI
+        FROM [AuroFiscal].[dbo].[UsosCFDIRegimenes] U
+        JOIN [AuroFiscal].[dbo].[UsosCFDI] C ON U.c_UsosCFDI = C.c_UsosCFDI
+        WHERE U.RegimenSATId = ?
+    """
     try:
-        conn = get_prod_connection()
+        conn = get_AFiscal_connection()  
         cursor = conn.cursor()
-        cursor.execute(query)
-        productos = [
+        cursor.execute(query, (regimen_sat_id,))
+        resultados = [
             {
-                "id": row.id,
-                "nombre": row.nombre,
-                "precio": row.precio,
-                "stock": row.stock,
-                "imagen": row.imagen
+                "c_UsosCFDI": row.c_UsosCFDI,
+                "DescripcionUsoCFDI": row.DescripcionUsoCFDI
             }
             for row in cursor.fetchall()
         ]
         conn.close()
-        return productos
-    except Exception as e:
-        return {"error": str(e)}
-
-def insert_producto(nombre: str, precio: float, stock: int, imagen: str):
-    query = """
-        INSERT INTO Productos$ (nombre, precio, stock, imagen)
-        VALUES (?,  ?, ?, ?)
-    """
-    try:
-        conn = get_prod_connection()
-        cursor = conn.cursor()
-        cursor.execute(query, (nombre, precio, stock, imagen))
-        conn.commit()
-        conn.close()
-        return {"mensaje": "Producto creado con éxito"}
+        return resultados
     except Exception as e:
         return {"error": str(e)}
